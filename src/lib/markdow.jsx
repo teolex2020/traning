@@ -1,25 +1,22 @@
 import React from 'react'
 import ReactMarkdown from 'react-markdown'
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { dracula } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import { prism } from 'react-syntax-highlighter/dist/esm/styles/prism'
 
-interface MarkdownRendererProps {
-	content: string
-}
 
 
 
 
 
-export function MarkdownRenderer({ content }: MarkdownRendererProps) {
+
+export function MarkdownRenderer({ content }) {
 	return (
 		<div className='markdown-container prose max-w-none'>
 			<ReactMarkdown
 				components={{
 					// Стилізація заголовків
 					h1: ({ ...props }) => (
-						<h1 className='text-3xl font-bold my-4' {...props} />
+						<h1 className='text-3xl font-bold my-3' {...props} />
 					),
 					h2: ({ ...props }) => (
 						<h2 className='text-2xl font-bold my-3' {...props} />
@@ -64,7 +61,7 @@ export function MarkdownRenderer({ content }: MarkdownRendererProps) {
 						) : (
 							<SyntaxHighlighter
 								style={prism}
-								language={match[1]}
+														language={match[1]}
 								PreTag='div'
 								{...props}
 							>

@@ -12,9 +12,11 @@ import {
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { training } from './actions'
+import { PDFFont, PDFDocument, rgb } from 'pdf-lib'
+import fontKit from '@pdf-lib/fontkit'
 import { MarkdownRenderer } from '@/lib/markdow'
-import { marked } from 'marked'
-import { jsPDF } from 'jspdf'
+
+
 
 
 interface FormData {
@@ -59,6 +61,7 @@ const initialFormData: FormData = {
 
 export default function MultiStepForm() {
 	const [answer, setAnswer] = useState<string | null>(null)
+	const [pdfUrl, setPdfUrl] = useState<string | null>(null)
 	const [step, setStep] = useState(1)
 	const [loading, setLoading] = useState(false)
 	const [formData, setFormData] = useState<FormData>(initialFormData)
@@ -95,12 +98,120 @@ export default function MultiStepForm() {
 		[formData]
 	)
 
-	const downloadFile = useCallback(async () => {
+	const generatePDF = useCallback(async () => {
 		if (!answer) return
-		const doc = new jsPDF()
-		const htmlContent = await marked(answer) // Await the promise
-		doc.text(htmlContent, 10, 10)
-		doc.save('training_plan.pdf')
+
+		// Створюємо новий PDF документ
+		const pdfDoc = await PDFDocument.create()
+		pdfDoc.registerFontkit(fontKit) // Реєструємо fontKit
+
+		// Завантажуємо шрифт, який підтримує кирилицю
+		const fontUrl = '/fonts/Roboto-Regular.ttf'
+		const fontBytes = await fetch(fontUrl).then((res) => res.arrayBuffer())
+		const customFont = await pdfDoc.embedFont(fontBytes)
+
+		// Додаємо першу сторінку
+		let page = pdfDoc.addPage([595.28, 841.89]) // A4 формат у пунктах
+		const { width, height } = page.getSize()
+		let y = height - 50 // Відступ зверху
+
+		// Додаємо текст на сторінку
+		const fontSize = 12
+		const headerFontSize = 18 // Розмір шрифту для заголовків
+		const lineHeight = fontSize + 4 // Відступ між рядками
+		const headerLineHeight = headerFontSize + 8 // Відступ між заголовками
+		const marginBottom = 50 // Відступ знизу для нової сторінки
+		const maxWidth = width - 100 // Максимальна ширина тексту з відступами
+
+		const lines = answer.split('\n') // Розбиваємо текст на рядки
+
+		const splitTextIntoLines = (
+			text: string,
+			maxWidth: number,
+			fontSize: number,
+			font: PDFFont
+		) => {
+			const words = text.split(' ')
+			const lines = []
+			let currentLine = words[0]
+
+			for (let i = 1; i < words.length; i++) {
+				const word = words[i]
+				const width = font.widthOfTextAtSize(currentLine + ' ' + word, fontSize)
+				if (width < maxWidth) {
+					currentLine += ' ' + word
+				} else {
+					lines.push(currentLine)
+					currentLine = word
+				}
+			}
+			lines.push(currentLine)
+			return lines
+		}
+
+		lines.forEach((line) => {
+			const textHeight = line.startsWith('# ') ? headerLineHeight : lineHeight
+
+			// Перевіряємо, чи залишилося достатньо місця на сторінці
+			if (y - textHeight < marginBottom) {
+				// Якщо місця недостатньо, створюємо нову сторінку
+				page = pdfDoc.addPage([595.28, 841.89])
+				y = height - 50 // Скидаємо відступ зверху для нової сторінки
+			}
+
+			if (line.startsWith('# ')) {
+				// Заголовок 1
+				const headerText = line.replace('# ', '')
+				page.drawText(headerText, {
+					x: 50,
+					y,
+					size: headerFontSize,
+					font: customFont,
+					color: rgb(0, 0, 0),
+				})
+				y -= headerLineHeight // Відступ між рядками
+			} else if (line.startsWith('## ')) {
+				// Заголовок 2
+				const headerText = line.replace('## ', '')
+				page.drawText(headerText, {
+					x: 50,
+					y,
+					size: headerFontSize - 4, // Менший розмір для підзаголовків
+					font: customFont,
+					color: rgb(0, 0, 0),
+				})
+				y -= headerLineHeight - 4 // Відступ між рядками
+			} else {
+				// Звичайний текст
+				const textLines = splitTextIntoLines(
+					line,
+					maxWidth,
+					fontSize,
+					customFont
+				)
+				textLines.forEach((textLine) => {
+					page.drawText(textLine, {
+						x: 50,
+						y,
+						size: fontSize,
+						font: customFont,
+						color: rgb(0, 0, 0),
+					})
+					y -= lineHeight // Відступ між рядками
+				})
+			}
+		})
+
+		// Зберігаємо документ як Blob
+		const pdfBytes = await pdfDoc.save()
+		const pdfBlob = new Blob([pdfBytes], { type: 'application/pdf' })
+
+		// Створюємо URL для перегляду PDF
+		const url = URL.createObjectURL(pdfBlob)
+		setPdfUrl(url)
+
+		// Відкриваємо PDF у новому вікні
+		window.open(url, '_blank')
 	}, [answer])
 
 	const renderStepContent = () => {
@@ -402,11 +513,19 @@ export default function MultiStepForm() {
 				<div className='prose max-w-4xl mx-auto border border-[#0c0e1b] p-6 rounded-xl mt-6 '>
 					<MarkdownRenderer content={answer} />
 					<Button
-						onClick={downloadFile}
+						onClick={generatePDF}
 						className='mt-4 bg-[#0c0e1b] text-white hover:bg-[#191d38] rounded-xl'
 					>
-						Завантажити план
+						Генерувати PDF
 					</Button>
+					{pdfUrl && (
+						<Button
+							onClick={() => window.open(pdfUrl, '_blank')}
+							className='mt-4 ml-4 bg-[#0c0e1b] text-white hover:bg-[#191d38] rounded-xl'
+						>
+							Відкрити PDF у новому вікні
+						</Button>
+					)}
 				</div>
 			)}
 		</div>
